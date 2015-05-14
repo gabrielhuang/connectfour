@@ -1,170 +1,200 @@
-""" A board for Connect Four.
-    Currently does not work for diagonal wins (e.g. 5 in 
-    a row along a diagonal).
+# -*- coding: utf-8 -*-
+'''
+@brief: A board for Connect Four and abstract policies
+@author: Evan Chow (created), Gabriel Huang (modified)
+@data: May 2015
 
-    """
+Currently does not work for diagonal wins (e.g. 5 in 
+a row along a diagonal).
+'''
 
 import numpy as np
-import random
+
 
 class Board():
-    # The idea is that you place your pieces at the top, and they
-    # drop down to populate the first empty square closest to the bottom.
+    '''
+    The idea is that you place your pieces at the top, and they
+    drop down to populate the first empty square closest to the bottom.
+    
+    Convention:
+    EMPTY == 0
+    BLACK == 1
+    RED == 2
+    '''
+    EMPTY = 0
+    BLACK = 1
+    RED = 2
 
     def __init__(self, rows=6, cols=7):
-        self.board = np.zeros((rows, cols))
-        self.nrows = rows
-        self.ncols = cols
+        '''
+        Init empty board
+        '''
+        self.reset(rows, cols)
 
-    """ For playing pieces """
+    def reset(self, rows=6, cols=7):
+        self.board = np.zeros((rows, cols), dtype=int)
 
-    def __playPiece(self, piece_color, col, zero_index):
-        # Private method. 0-indexed
-        # Place a piece (denoted by 1) at a given column.
+    def clone(self):
+        '''
+        Return HARD copy of current board
+        '''
+        other = Board(self.nrows(), self.ncols())
+        other.board[:,:] = self.board
+        return other
 
-        color = 1 if piece_color == "red" else 2
+    def to_string(self, index):
+        '''
+        Convert index to corresponding BLACK/RED/EMPTY
+        '''
+        if index==self.EMPTY:
+            return 'EMPTY'
+        elif index==self.BLACK:
+            return 'BLACK'
+        elif index==self.RED:
+            return 'RED'
+        else:
+            raise Exception('Bad value {}'.format(index))
 
+    def nrows(self):
+        return self.board.shape[0]
+        
+    def ncols(self):
+        return self.board.shape[1]
+
+    def rows(self):
+        return (self.row(i) for i in range(self.nrows()))
+
+    def cols(self):
+        return (self.col(j) for j in range(self.ncols()))
+
+    def col(self, col):
+        return self.board[:, col]
+
+    def row(self, row):
+        return self.board[row, :]
+
+    def play(self, color, col):
+        '''
+        Place a piece at a given column.
+        
+        Parameters:
+        :color: player id, either Board.RED or Board.BLACK 
+        
+        Returns:
+        Game status
+        '''
         # Iterate bottom up until hit a 0; otherwise invalid move!
-        for sx in xrange(self.nrows-1, -2, -1):
-            if sx == -1:
-                # if hit top of board without empty square
-                raise Exception("No more moves in that column!")
-            if self.board[sx, col] == 0:
+        for sx in xrange(self.nrows()-1, -1, -1):
+            if self.board[sx, col] == self.EMPTY:
                 self.board[sx, col] = color
-                break
+                return self.isSolved()
 
-        # Return winner information (1 = RED, 2 = BLACK, -1 = neither yet)
-        return self.isSolved()
-
-    def playRed(self, col, zero_index=False):
-        # Place a RED piece (denoted by 1) at a given column.
-        # Return status of game.
-        return self.__playPiece("red", col, zero_index)
-
-    def playBlack(self, col, zero_index=False):
-        # Place a BLACK piece (denoted by 2) at a given column.
-        # Return status of game.
-        return self.__playPiece("black", col, zero_index)
-
-    """ For checking whether the board is solved """
-
-    def __hasFourInRow(self, vector):
-        # Given a vector, see if it has a winner (4 of same piece in row).
-        # Could be improved and made more concise with NumPy
-
-        # Handle 0's. Note that if >2 spaces are still empty (== 0), you
-        # can't have a winner.
-        num_zeros = sum([1 if i == 0 else 0 for i in vector])
-        if num_zeros > 2:
-            return -1
-
-        # Simple linear algorithm to check if there is a 5-in-a-row,
-        # and if so return 1 (RED) or 2 (BLACK). Else, return -1.
-        this_col = vector
-        slow = fast = 0
-        while True:
-            if this_col[slow] == this_col[fast]:
-                fast += 1
-            else:
-                if abs(fast - slow) >= 4:
-                    if this_col[slow] == 1:
-                        return 1
-                    return 2
-                slow = fast
-                fast += 1
-            if fast > len(this_col) - 1:
-                if this_col[slow] == this_col[fast - 1]:
-                    if abs(fast - slow) >= 4:
-                        if this_col[slow] == 1:
-                            return 1
-                        return 2
-                break
-        return -1
-
+         # if hit top of board without empty square
+        raise Exception("No more moves in that column!")
+        
+    def hasFourAligned(self, vector, n_to_win=4):
+        '''
+        For checking whether the board is solved
+        Given a vector, see if it has a winner (n_to_win of same piece in row).
+        
+        Parameters:
+        :n_to_win: number to win (typically 4)
+        '''
+        last = 0
+        for i in range(len(vector)):
+            if vector[i] != vector[last]:
+                last = i
+            if i-last+1 >= n_to_win and vector[i] != self.EMPTY:
+                return vector[i]
+        return self.EMPTY
+        
     def isSolved(self):
-        # Return 1 if RED has won, 2 if BLACK has, and -1 if neither
-        # has won yet.
-
+        '''
+        Return:
+        Board.RED if RED has won, 
+        Board.BLACK if BLACK has won, 
+        Board.EMPTY if neither
+        '''
         # Check if any of the columns have winners.
-        for i in range(self.ncols):
-            result = self.__hasFourInRow(self.board[:,i])
-            if result > 0:
+        for col in self.cols():
+            result = self.hasFourAligned(col)
+            if result != self.EMPTY:
                 return result
-
         # Check if any of the rows have winners.
-        for j in range(self.nrows):
-            result = self.__hasFourInRow(self.board[j,:])
-            if result > 0:
+        for row in self.rows():
+            result = self.hasFourAligned(row)
+            if result != self.EMPTY:
                 return result
-
-        return -1
+        # No winners
+        return self.EMPTY
 
     def availCols(self):
         # Return whichever columns are available for more moves.
-        return [i for i in xrange(self.ncols) if self.board[0,i] == 0]
-
-    """ Other utilities """
-
-    def getCol(self, col):
-        return self.board[:, col]
-
-    def getRow(self, row):
-        return self.board[row, :]
+        return [i for i in xrange(self.ncols()) if self.board[0,i] == 0]
 
     def randomize(self):
-        # Randomize the board with 0's, 1's, and 2's, still noting
-        # the effects of gravity (pieces fall to bottom). Does not
-        # check if the board is solved.
+        '''
+        Randomize the board with 0's, 1's, and 2's
+        Accounts for gravity (pieces fall to bottom). 
+        Does not check if the board is solved.
+        '''
+        self.reset(self.nrows(), self.ncols())
+        num_pieces = np.random.randint(self.nrows() * self.ncols())
+        
+        for i in range(num_pieces):
+            color = self.BLACK if i%2 else self.RED          
+            avail_cols = self.availCols()
+            choice = np.random.choice(avail_cols)
+            self.play(color, choice)
+        return self
+        
+    def __repr__(self):
+        '''
+        Pretty print the board
+        '''
+        acc=["--------- BOARD ----------",str(self.board),"--------------------------"]
+        return '\n'.join(acc)
 
-        # Reset board, then generate # of pieces to play.
-        self.board = np.zeros((self.nrows, self.ncols))
-        num_pieces = random.choice(xrange(self.nrows * self.ncols))
-        pieces = iter([random.randint(1,2) for i in xrange(num_pieces)])
+class Policy:
+    '''
+    Abstract class for Connect 4 policies
+    '''
+    def take_action(self, board):
+        '''
+        Return an action (integer) given the current board
+        '''
+        pass
 
-        # Reset board. For each piece, check which cols are available to play,
-        # and then play whoever's turn it is next.
-        for px, piece in enumerate(pieces):
-            avail_cols = [i for i in xrange(self.ncols)
-                if self.board[0,i] == 0]
-            rand_col = random.choice(avail_cols)
 
-            if px % 2 == 0: # whoever goes first
-                self.playRed(rand_col)
-            else:
-                self.playBlack(rand_col)
+class RandomPolicy:
+    '''
+    Returns a random play
+    '''
+    def take_action(self, board):
+        avail_cols = board.availCols()
+        return np.random.choice(avail_cols)
 
-    def show(self):
-        # Pretty print the board
-        print "--------- BOARD ----------"
-        for j in xrange(self.nrows):
-            for i in xrange(self.ncols):
-                print "%d " % self.board[j,i],
-            print
-        print "--------------------------"
 
 if __name__=="__main__":
 
     # Run a sample game. Both sides here just play randomly.
-    nrows, ncols = 6, 7
-    board = Board(rows=nrows, cols=ncols)
-    for i in xrange(64):
-        print "Next: move %d. %s\'s turn!" % (i,
-            ("RED" if i % 2 == 0 else "BLACK"))
+    board = Board(rows=6, cols=7)
+    policy = RandomPolicy()
+    for i in xrange(board.nrows()*board.ncols()):
+        color = Board.BLACK if i%2 else Board.RED    
+        
+        print "\nNext: move {}. {}'s turn!".format(i, board.to_string(color))
 
-        # Get a random available column
-        avail_cols = board.availCols()
-        if len(avail_cols) == 0:
+        # Check if can play
+        if not board.availCols():
             print "NEITHER RED OR BLACK WIN\n"
             break
-        rand_col = random.choice(avail_cols)
-
-        if i % 2 == 0:
-            game_status = board.playRed(rand_col)
-        else:
-            game_status = board.playBlack(rand_col)
-        board.show()
-        print 
-        if game_status > 0:
-            print "%s wins!\n" % ("RED" if game_status == 1 else "BLACK")
+        
+        action = policy.take_action(board)
+        winner = board.play(color, action)
+        print board
+        
+        if winner != Board.EMPTY:
             break
+    print "\n{} ({}) wins!\n".format(board.to_string(winner), winner)
 
