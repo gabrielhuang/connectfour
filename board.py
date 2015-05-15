@@ -25,11 +25,12 @@ class Board():
     BLACK = 1
     RED = 2
 
-    def __init__(self, rows=6, cols=7):
+    def __init__(self, rows=6, cols=7, to_win=4):
         '''
         Init empty board
         '''
         self.reset(rows, cols)
+        self.to_win = to_win
 
     def reset(self, rows=6, cols=7):
         self.board = np.zeros((rows, cols), dtype=int)
@@ -38,7 +39,7 @@ class Board():
         '''
         Return HARD copy of current board
         '''
-        other = Board(self.nrows(), self.ncols())
+        other = Board(self.nrows(), self.ncols(), self.to_win)
         other.board[:,:] = self.board
         return other
 
@@ -55,6 +56,14 @@ class Board():
         else:
             raise Exception('Bad value {}'.format(index))
 
+    def flip(self):
+        '''
+        Swap REDS and BLACKS
+        '''
+        red_pos = (self.board==self.RED)
+        self.board[self.board==self.BLACK] = self.RED
+        self.board[red_pos] = self.BLACK
+
     def nrows(self):
         return self.board.shape[0]
         
@@ -62,10 +71,10 @@ class Board():
         return self.board.shape[1]
 
     def rows(self):
-        return (self.row(i) for i in range(self.nrows()))
+        return (self.row(i) for i in xrange(self.nrows()))
 
     def cols(self):
-        return (self.col(j) for j in range(self.ncols()))
+        return (self.col(j) for j in xrange(self.ncols()))
 
     def col(self, col):
         return self.board[:, col]
@@ -87,12 +96,12 @@ class Board():
         for sx in xrange(self.nrows()-1, -1, -1):
             if self.board[sx, col] == self.EMPTY:
                 self.board[sx, col] = color
-                return self.isSolved()
+                return self.getWinner()
 
          # if hit top of board without empty square
         raise Exception("No more moves in that column!")
         
-    def hasFourAligned(self, vector, n_to_win=4):
+    def hasEnoguhAligned(self, vector, n_to_win=4):
         '''
         For checking whether the board is solved
         Given a vector, see if it has a winner (n_to_win of same piece in row).
@@ -101,14 +110,14 @@ class Board():
         :n_to_win: number to win (typically 4)
         '''
         last = 0
-        for i in range(len(vector)):
+        for i in xrange(len(vector)):
             if vector[i] != vector[last]:
                 last = i
             if i-last+1 >= n_to_win and vector[i] != self.EMPTY:
                 return vector[i]
         return self.EMPTY
         
-    def isSolved(self):
+    def getWinner(self):
         '''
         Return:
         Board.RED if RED has won, 
@@ -117,19 +126,21 @@ class Board():
         '''
         # Check if any of the columns have winners.
         for col in self.cols():
-            result = self.hasFourAligned(col)
+            result = self.hasEnoguhAligned(col, self.to_win)
             if result != self.EMPTY:
                 return result
         # Check if any of the rows have winners.
         for row in self.rows():
-            result = self.hasFourAligned(row)
+            result = self.hasEnoguhAligned(row, self.to_win)
             if result != self.EMPTY:
                 return result
         # No winners
         return self.EMPTY
 
     def availCols(self):
-        # Return whichever columns are available for more moves.
+        '''
+        Return whichever columns are available for more moves.
+        '''
         return [i for i in xrange(self.ncols()) if self.board[0,i] == 0]
 
     def randomize(self):
@@ -141,12 +152,17 @@ class Board():
         self.reset(self.nrows(), self.ncols())
         num_pieces = np.random.randint(self.nrows() * self.ncols())
         
-        for i in range(num_pieces):
+        for i in xrange(num_pieces):
             color = self.BLACK if i%2 else self.RED          
             avail_cols = self.availCols()
             choice = np.random.choice(avail_cols)
             self.play(color, choice)
-        return self
+        
+    def to_tuple(self):
+        '''
+        Convert board to tuple that can be used to index the state in a lookup table
+        '''        
+        return tuple(map(tuple, self.board))
         
     def __repr__(self):
         '''
@@ -180,21 +196,30 @@ if __name__=="__main__":
     # Run a sample game. Both sides here just play randomly.
     board = Board(rows=6, cols=7)
     policy = RandomPolicy()
+    winner = Board.EMPTY
     for i in xrange(board.nrows()*board.ncols()):
         color = Board.BLACK if i%2 else Board.RED    
-        
         print "\nNext: move {}. {}'s turn!".format(i, board.to_string(color))
-
-        # Check if can play
-        if not board.availCols():
-            print "NEITHER RED OR BLACK WIN\n"
-            break
-        
+        if not board.availCols(): break # Nobody can play
+           
+        # Get new action following policy
         action = policy.take_action(board)
+        
+        # Play action
         winner = board.play(color, action)
+
+        if winner != Board.EMPTY: break # We have a winner
         print board
         
-        if winner != Board.EMPTY:
-            break
+    # Print result
     print "\n{} ({}) wins!\n".format(board.to_string(winner), winner)
 
+    # Generate a random board
+    print 'Btw, here is a random board'
+    board2 = board.clone()
+    board2.randomize()
+    print board2
+    
+    print 'And its flipped version'
+    board2.flip()
+    print board2
