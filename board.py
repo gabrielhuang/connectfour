@@ -171,55 +171,15 @@ class Board():
         acc=["--------- BOARD ----------",str(self.board),"--------------------------"]
         return '\n'.join(acc)
 
-class Policy:
-    '''
-    Abstract class for Connect 4 policies
-    '''
-    def take_action(self, board):
-        '''
-        Return an action (integer) given the current board
-        '''
-        pass
-
-
-class RandomPolicy:
-    '''
-    Returns a random play
-    '''
-    def take_action(self, board):
-        avail_cols = board.availCols()
-        return np.random.choice(avail_cols)
-
-
 if __name__=="__main__":
-
-    # Run a sample game. Both sides here just play randomly.
-    board = Board(rows=6, cols=7)
-    policy = RandomPolicy()
-    winner = Board.EMPTY
-    for i in xrange(board.nrows()*board.ncols()):
-        color = Board.BLACK if i%2 else Board.RED    
-        print "\nNext: move {}. {}'s turn!".format(i, board.to_string(color))
-        if not board.availCols(): break # Nobody can play
-           
-        # Get new action following policy
-        action = policy.take_action(board)
-        
-        # Play action
-        winner = board.play(color, action)
-
-        if winner != Board.EMPTY: break # We have a winner
-        print board
-        
-    # Print result
-    print "\n{} ({}) wins!\n".format(board.to_string(winner), winner)
 
     # Generate a random board
     print 'Btw, here is a random board'
-    board2 = board.clone()
-    board2.randomize()
-    print board2
+    board = Board()
+    board.randomize()
+    print board
     
     print 'And its flipped version'
+    board2 = board.clone()
     board2.flip()
     print board2
