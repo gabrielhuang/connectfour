@@ -12,6 +12,7 @@ import theano.tensor as T
 import lasagne as nn 
 import numpy as np
 from board import Board
+import policy
 
 def board_to_feature(board_mat):
     if board_mat.shape != (6,7):
@@ -35,7 +36,7 @@ def create_from_shared(shared):
     raise Exception('Bad size {}'.format(shared.get_value().shape))
     
 # Neural Network Params
-nepisodes = 1000
+nepisodes = 10000
 eta = 0.1
 
 # TD(lambda) Params
@@ -48,18 +49,27 @@ gamma = 0.999
 l_in = nn.layers.InputLayer((None, 3, 7, 7))
 
 # FIRST CONVOLUTIONAL LAYER
-l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=4, filter_size=(2, 2),strides=(1, 1),
+l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=16, filter_size=(2, 2),strides=(1, 1),
                                 nonlinearity=nn.nonlinearities.rectify)
 
 # FIRST POOLING LAYER. 
 l_pool1 = nn.layers.MaxPool2DLayer(l_conv1, ds=(2, 2))
 
 # SECOND CONVOLUTIONAL LAYER
-l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=8, filter_size=(2, 2),strides=(1, 1),
+l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=64, filter_size=(2, 2),strides=(1, 1),
                                 nonlinearity=nn.nonlinearities.rectify)
 
 # SECOND POOLING LAYER. Downsample a factor of 2x2
 l_pool2 = nn.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
+
+'''
+# THIRD CONVOLUTIONAL LAYER
+l_conv3 = nn.layers.Conv2DLayer(l_pool2, num_filters=8, filter_size=(2, 2),strides=(1, 1),
+                                nonlinearity=nn.nonlinearities.rectify)
+
+# THIRD POOLING LAYER. Downsample a factor of 2x2
+l_pool3 = nn.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
+'''
 
 # Output layer, softmax, --------- Gives scores for black
 l_out = nn.layers.DenseLayer(l_pool2, num_units=1, nonlinearity=nn.nonlinearities.tanh)
@@ -85,11 +95,13 @@ weight_updates = [(weight, weight+weight_delta) for weight, weight_delta in zip(
 update_grads = theano.function([l_in.input_var], l_out.get_output(), updates=smoothed_grads_updates)
 update_weights = theano.function(weight_deltas, weight_deltas, updates=weight_updates)
 
-
-def optimal_action(board, color):
+#%%
+def optimal_action(board, color, possible_actions=None):
     '''
     This calls the neural network to determine the best action to take
     '''
+    if possible_actions is None:
+        possible_actions = board.availCols()
     action_scores = []
     for action in possible_actions:
         possible_board = board.clone()
@@ -100,6 +112,12 @@ def optimal_action(board, color):
         if color==Board.BLACK else -scores[0], reverse=True)
     best_action = action_scores[0][0]
     return best_action
+    
+    
+class ConvNetPolicy(policy.Policy) :
+    def take_action(self, color, board):
+        return optimal_action(board, color)
+        
     
 #%%
 board = Board()
@@ -161,3 +179,12 @@ for ply in xrange(7*6):
     print '\n{} plays {}'.format(board.to_string(color), best_action)
     print board
 print 'Winner is {} after {} moves'.format(board.to_string(color), ply)
+
+#%% Evaluate
+eval_games = 1000
+convnet_policy = ConvNetPolicy()
+random_policy = policy.RandomPolicy()
+print 'Evaluating ConvnetPolicy against RandomPolicy for {} rounds'.format(eval_games)
+stats = policy.compete_fair(Board(), convnet_policy, random_policy, eval_games)
+print '{} wins, {} draws, {} losses for ConvnetPolicy when playing first'.format(*stats[0])
+print '{} wins, {} draws, {} losses for ConvnetPolicy when playing second'.format(*stats[1])
