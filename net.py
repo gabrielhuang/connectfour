@@ -24,8 +24,8 @@ input_rows = 15
 input_cols = 15
 
 # TD(lambda) Params
-lmbda = 0.
-gamma = 0.5
+lmbda = 0.7
+gamma = 0.99
 
 
 
@@ -64,20 +64,20 @@ def create_from_shared(shared):
 l_in = nn.layers.InputLayer((None, 3, input_rows, input_cols))
 
 # FIRST CONVOLUTIONAL LAYER
-l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=16, filter_size=(3, 3),strides=(1, 1),
+l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=16, filter_size=(2, 2),strides=(1, 1),
                                 nonlinearity=nn.nonlinearities.rectify)
 
 # FIRST POOLING LAYER. 
 l_pool1 = nn.layers.MaxPool2DLayer(l_conv1, ds=(2, 2))
 
 # SECOND CONVOLUTIONAL LAYER
-l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=32, filter_size=(3, 3),strides=(1, 1),
+l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=32, filter_size=(2, 2),strides=(1, 1),
                                 nonlinearity=nn.nonlinearities.rectify)
 
 # SECOND POOLING LAYER. Downsample a factor of 2x2
 l_pool2 = nn.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
 
-use_third_layer = False
+use_third_layer = True
 if use_third_layer:
     # THIRD CONVOLUTIONAL LAYER
     l_conv3 = nn.layers.Conv2DLayer(l_pool2, num_filters=128, filter_size=(2, 2),strides=(1, 1),
@@ -159,13 +159,17 @@ def eval_against_random(ngames):
            
       
 #%% Learn Optimal Value
-epsilon =  0.1 # every 10% of the cases play a random move (this is on-policy)
+epsilons =  {0: 0.1, 1000: 0.08, 10000: 0.005}
+etas = {0: 0.1, 1000: 0.03, 10000: 0.005}
 random_policy = policy.RandomPolicy()
 wins = []
 profiler = Profiler()
 for episode in xrange(nepisodes):
+    epsilon = epsilons.get(episode, epsilon)
+    eta = epsilons.get(episode, eta)
+    
     if episode%10 == 0: 
-        print 'Episode {}/{}'.format(episode+1, nepisodes)
+        print 'Episode {}/{} epsilon {} eta {}'.format(episode+1, nepisodes, epsilon, eta)
     # Evaluate against Random every once in a while:
     if (episode+1) % 500 == 0:
         stats = eval_against_random(100)
@@ -201,8 +205,8 @@ for episode in xrange(nepisodes):
             inp = board_to_feature(board.board)
             y_target = predict(inp)[0,0]
         
-        print 'Episode {} Ply {} Color played {} ytarget {}'.format(
-                episode, ply, board.to_string(color), y_target)
+        #print 'Episode {} Ply {} Color played {} ytarget {}'.format(
+        #        episode, ply, board.to_string(color), y_target)
         
         # Update smoothed gradients and weights
         if ply > 0:
