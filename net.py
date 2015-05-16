@@ -13,15 +13,22 @@ import lasagne as nn
 import numpy as np
 from board import Board
 import policy
+from profiler import Profiler
+
+input_rows = 15
+input_cols = 15
 
 def board_to_feature(board_mat):
     if board_mat.shape != (6,7):
         raise Exception('Board must be of size (6,7)')
-    feature = np.zeros((3, 7, 7))
-    feature[0,0,:] = 1 # Border on first row
-    feature[1,1:,:][board_mat==1] = 1 # BLACKS
-    feature[2,1:,:][board_mat==2] = 1 # REDS
-    return feature.reshape((1,3,7,7))
+    feature = np.zeros((3, input_rows, input_cols))
+    offset_rows = input_rows/2 - board_mat.shape[0]/2
+    offset_cols = input_cols/2 - board_mat.shape[0]/2
+    feature[0,offset_rows:offset_rows+board_mat.shape[0],offset_cols:offset_cols+board_mat.shape[1]] = 1 # Border on first row
+    feature[1,offset_rows:offset_rows+board_mat.shape[0],offset_cols:offset_cols+board_mat.shape[1]][board_mat==1] = 1 # BLACKS
+    feature[2,offset_rows:offset_rows+board_mat.shape[0],offset_cols:offset_cols+board_mat.shape[1]][board_mat==2] = 1 # REDS
+    return feature.reshape((1,3,input_rows,input_cols))
+
 
 def create_from_shared(shared):
     shape = len(shared.get_value().shape)
@@ -36,8 +43,8 @@ def create_from_shared(shared):
     raise Exception('Bad size {}'.format(shared.get_value().shape))
     
 # Neural Network Params
-nepisodes = 10000
-eta = 0.1
+nepisodes = 30000
+eta = 0.01
 
 # TD(lambda) Params
 lmbda = 0.7
@@ -46,7 +53,7 @@ gamma = 0.999
 #%%    
 
 # INPUT LAYER, dimension as the movie (tensor)
-l_in = nn.layers.InputLayer((None, 3, 7, 7))
+l_in = nn.layers.InputLayer((None, 3, input_rows, input_cols))
 
 # FIRST CONVOLUTIONAL LAYER
 l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=16, filter_size=(2, 2),strides=(1, 1),
@@ -56,23 +63,25 @@ l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=16, filter_size=(2, 2),strides
 l_pool1 = nn.layers.MaxPool2DLayer(l_conv1, ds=(2, 2))
 
 # SECOND CONVOLUTIONAL LAYER
-l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=64, filter_size=(2, 2),strides=(1, 1),
+l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=16, filter_size=(2, 2),strides=(1, 1),
                                 nonlinearity=nn.nonlinearities.rectify)
 
 # SECOND POOLING LAYER. Downsample a factor of 2x2
 l_pool2 = nn.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
 
-'''
-# THIRD CONVOLUTIONAL LAYER
-l_conv3 = nn.layers.Conv2DLayer(l_pool2, num_filters=8, filter_size=(2, 2),strides=(1, 1),
-                                nonlinearity=nn.nonlinearities.rectify)
-
-# THIRD POOLING LAYER. Downsample a factor of 2x2
-l_pool3 = nn.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
-'''
+use_third_layer = False
+if use_third_layer:
+    # THIRD CONVOLUTIONAL LAYER
+    l_conv3 = nn.layers.Conv2DLayer(l_pool2, num_filters=64, filter_size=(2, 2),strides=(1, 1),
+                                    nonlinearity=nn.nonlinearities.rectify)
+    
+    # THIRD POOLING LAYER. Downsample a factor of 2x2
+    l_pool3 = nn.layers.MaxPool2DLayer(l_conv3, ds=(2, 2))
+else:
+    l_pool3 = l_pool2
 
 # Output layer, softmax, --------- Gives scores for black
-l_out = nn.layers.DenseLayer(l_pool2, num_units=1, nonlinearity=nn.nonlinearities.tanh)
+l_out = nn.layers.DenseLayer(l_pool3, num_units=1, nonlinearity=nn.nonlinearities.tanh)
 predict = theano.function([l_in.input_var], l_out.get_output())
 
 # Parameters
@@ -89,11 +98,15 @@ example_grads = get_grads(inp)
 smoothed_grads = [theano.shared(np.array(0.*grad)) for grad in example_grads]
 smoothed_grads_updates = [(smoothed_grad, grad+lmbda*smoothed_grad) for smoothed_grad,grad in zip(smoothed_grads, grads)]
 weight_deltas = [create_from_shared(weight) for weight in params]
-weight_updates = [(weight, weight+weight_delta) for weight, weight_delta in zip(params, weight_deltas)]
+#weight_updates = [(weight, weight+weight_delta) for weight, weight_delta in zip(params, weight_deltas)]
+factor = T.scalar()
+weight_updates_2 = [(weight, weight + factor * smoothed_grad) for weight, smoothed_grad in zip(params, smoothed_grads)]
 
 # Compile theano functions
 update_grads = theano.function([l_in.input_var], l_out.get_output(), updates=smoothed_grads_updates)
-update_weights = theano.function(weight_deltas, weight_deltas, updates=weight_updates)
+#update_weights = theano.function(weight_deltas, weight_deltas, updates=weight_updates)
+
+update_weights_2 = theano.function([factor], factor, updates=weight_updates_2)
 
 #%%
 def optimal_action(board, color, possible_actions=None):
@@ -122,11 +135,26 @@ class ConvNetPolicy(policy.Policy) :
 #%%
 board = Board()
 inp = board_to_feature(board.board)
-print predict(inp)
 
 #%% Learn Optimal Value
+wins = []
+profiler = Profiler()
 for episode in xrange(nepisodes):
     print 'Episode {}/{}'.format(episode+1, nepisodes)
+    # Evaluate against Random every once in a while:
+    profiler.tic('evaluation')
+    if episode % 100 == 0:
+        print 'Episode {}/{}'.format(episode+1, nepisodes)
+        eval_games = 100
+        convnet_policy = ConvNetPolicy()
+        random_policy = policy.RandomPolicy()
+        print 'Evaluating ConvnetPolicy against RandomPolicy for {} rounds'.format(eval_games)
+        stats = policy.compete_fair(Board(), convnet_policy, random_policy, eval_games)
+        print '{} wins, {} draws, {} losses for ConvnetPolicy when playing first'.format(*stats[0])
+        print '{} wins, {} draws, {} losses for ConvnetPolicy when playing second'.format(*stats[1])       
+        wins.append((episode, stats[0][0], stats[1][0]))
+    profiler.toc()        
+        
     board = Board()
    
     end_of_game = False
@@ -142,27 +170,40 @@ for episode in xrange(nepisodes):
         
         # Compute target
         if winner != Board.EMPTY or not possible_actions: # END OF EPISODE
-            y_target = np.array([winner]) # (BLACK SCORE, RED SCORE)
+            if winner == Board.EMPTY:
+                y_target = 0.
+            elif winner == Board.BLACK:
+                y_target = 1.
+            else:
+                y_target = -1.
             end_of_game = True
         else:
             inp = board_to_feature(board.board)
-            y_target = predict(inp)
+            y_target = predict(inp)[0,0]
         
         # Update smoothed gradients and weights
+        profiler.tic('update_grads')
         update_grads(inp)
+        profiler.toc()
         if ply>0:
-            update_weights(*[eta * (y_target-y_last)[0] * smoothed_grad.get_value() for smoothed_grad in smoothed_grads])        
-        
+            profiler.tic('update_weights')
+            update_weights_2(eta * (y_target - y_last))
+            profiler.toc()
+            
         # Finish this episode
         if end_of_game:
             break
         
         # Find and play best value for current player color/(ply%2)
+        profiler.tic('find_best_action')
         best_action = optimal_action(board, color)
         board.play(color, best_action)
+        profiler.toc()
         
         # Backup last value
         y_last = y_target
+        
+print profiler        
         
 #%% Self-Play optimal strategy
 board = Board()
@@ -181,7 +222,7 @@ for ply in xrange(7*6):
 print 'Winner is {} after {} moves'.format(board.to_string(color), ply)
 
 #%% Evaluate
-eval_games = 1000
+eval_games = 10
 convnet_policy = ConvNetPolicy()
 random_policy = policy.RandomPolicy()
 print 'Evaluating ConvnetPolicy against RandomPolicy for {} rounds'.format(eval_games)
