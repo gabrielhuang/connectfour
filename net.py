@@ -15,19 +15,24 @@ from board import Board
 import policy
 from profiler import Profiler
 
+
 input_rows = 15
 input_cols = 15
 
-def board_to_feature(board_mat):
+def board_to_feature(board_mat, cache=None):
     if board_mat.shape != (6,7):
         raise Exception('Board must be of size (6,7)')
-    feature = np.zeros((3, input_rows, input_cols))
+    if cache is None:
+        feature = np.zeros((1, 3, input_rows, input_cols))
+    else:        
+        feature = cache
+        feature[:] = 0.
     offset_rows = input_rows/2 - board_mat.shape[0]/2
     offset_cols = input_cols/2 - board_mat.shape[0]/2
-    feature[0,offset_rows:offset_rows+board_mat.shape[0],offset_cols:offset_cols+board_mat.shape[1]] = 1 # Border on first row
-    feature[1,offset_rows:offset_rows+board_mat.shape[0],offset_cols:offset_cols+board_mat.shape[1]][board_mat==1] = 1 # BLACKS
-    feature[2,offset_rows:offset_rows+board_mat.shape[0],offset_cols:offset_cols+board_mat.shape[1]][board_mat==2] = 1 # REDS
-    return feature.reshape((1,3,input_rows,input_cols))
+    feature[0,0,offset_rows:offset_rows+board_mat.shape[0],offset_cols:offset_cols+board_mat.shape[1]] = 1 # Border on first row
+    feature[0,1,offset_rows:offset_rows+board_mat.shape[0],offset_cols:offset_cols+board_mat.shape[1]][board_mat==1] = 1 # BLACKS
+    feature[0,2,offset_rows:offset_rows+board_mat.shape[0],offset_cols:offset_cols+board_mat.shape[1]][board_mat==2] = 1 # REDS
+    return feature
 
 
 def create_from_shared(shared):
@@ -44,7 +49,7 @@ def create_from_shared(shared):
     
 # Neural Network Params
 nepisodes = 30000
-eta = 0.01
+eta = 0.1
 
 # TD(lambda) Params
 lmbda = 0.7
@@ -56,23 +61,23 @@ gamma = 0.999
 l_in = nn.layers.InputLayer((None, 3, input_rows, input_cols))
 
 # FIRST CONVOLUTIONAL LAYER
-l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=16, filter_size=(2, 2),strides=(1, 1),
+l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=4, filter_size=(2, 2),strides=(1, 1),
                                 nonlinearity=nn.nonlinearities.rectify)
 
 # FIRST POOLING LAYER. 
 l_pool1 = nn.layers.MaxPool2DLayer(l_conv1, ds=(2, 2))
 
 # SECOND CONVOLUTIONAL LAYER
-l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=16, filter_size=(2, 2),strides=(1, 1),
+l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=8, filter_size=(2, 2),strides=(1, 1),
                                 nonlinearity=nn.nonlinearities.rectify)
 
 # SECOND POOLING LAYER. Downsample a factor of 2x2
 l_pool2 = nn.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
 
-use_third_layer = False
+use_third_layer = True
 if use_third_layer:
     # THIRD CONVOLUTIONAL LAYER
-    l_conv3 = nn.layers.Conv2DLayer(l_pool2, num_filters=64, filter_size=(2, 2),strides=(1, 1),
+    l_conv3 = nn.layers.Conv2DLayer(l_pool2, num_filters=16, filter_size=(2, 2),strides=(1, 1),
                                     nonlinearity=nn.nonlinearities.rectify)
     
     # THIRD POOLING LAYER. Downsample a factor of 2x2
@@ -109,17 +114,18 @@ update_grads = theano.function([l_in.input_var], l_out.get_output(), updates=smo
 update_weights_2 = theano.function([factor], factor, updates=weight_updates_2)
 
 #%%
-def optimal_action(board, color, possible_actions=None):
+def optimal_action(board, color, possible_actions=None, cache=None):
     '''
     This calls the neural network to determine the best action to take
     '''
     if possible_actions is None:
         possible_actions = board.availCols()
     action_scores = []
+    cache2 = board.clone().board
     for action in possible_actions:
-        possible_board = board.clone()
+        possible_board = board.clone(cache2)
         possible_board.play(color, action)
-        possible_inp = board_to_feature(possible_board.board)
+        possible_inp = board_to_feature(possible_board.board, cache)
         action_scores.append((action, predict(possible_inp)))
     action_scores = sorted(action_scores, key=lambda (action,scores): scores[0]
         if color==Board.BLACK else -scores[0], reverse=True)
@@ -139,13 +145,14 @@ inp = board_to_feature(board.board)
 #%% Learn Optimal Value
 wins = []
 profiler = Profiler()
+cache = np.zeros((1, 3, input_rows, input_cols))
 for episode in xrange(nepisodes):
-    print 'Episode {}/{}'.format(episode+1, nepisodes)
+    if episode%10 == 0: print 'Episode {}/{}'.format(episode+1, nepisodes)
     # Evaluate against Random every once in a while:
     profiler.tic('evaluation')
-    if episode % 100 == 0:
+    if episode % 500 == 0:
         print 'Episode {}/{}'.format(episode+1, nepisodes)
-        eval_games = 100
+        eval_games = 1000
         convnet_policy = ConvNetPolicy()
         random_policy = policy.RandomPolicy()
         print 'Evaluating ConvnetPolicy against RandomPolicy for {} rounds'.format(eval_games)
@@ -196,7 +203,7 @@ for episode in xrange(nepisodes):
         
         # Find and play best value for current player color/(ply%2)
         profiler.tic('find_best_action')
-        best_action = optimal_action(board, color)
+        best_action = optimal_action(board, color, possible_actions, cache)
         board.play(color, best_action)
         profiler.toc()
         

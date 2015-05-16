@@ -25,22 +25,24 @@ class Board():
     BLACK = 1
     RED = 2
 
-    def __init__(self, rows=6, cols=7, to_win=4):
+    def __init__(self, rows=6, cols=7, to_win=4, cache=None):
         '''
         Init empty board
         '''
-        self.reset(rows, cols)
         self.to_win = to_win
+        if cache is None:
+            self.board = np.zeros((rows, cols))
+        else:
+            self.board = cache
+            self.board[:] = 0.
 
-    def reset(self, rows=6, cols=7):
-        self.board = np.zeros((rows, cols), dtype=int)
-
-    def clone(self):
+    def clone(self, cache=None):
         '''
         Return HARD copy of current board
         '''
-        other = Board(self.nrows(), self.ncols(), self.to_win)
+        other = Board(self.nrows(), self.ncols(), self.to_win, cache)
         other.board[:,:] = self.board
+        
         return other
 
     def to_string(self, index):
@@ -149,7 +151,7 @@ class Board():
         Accounts for gravity (pieces fall to bottom). 
         Does not check if the board is solved.
         '''
-        self.reset(self.nrows(), self.ncols())
+        self.board[:] = 0.
         num_pieces = np.random.randint(self.nrows() * self.ncols())
         
         for i in xrange(num_pieces):
