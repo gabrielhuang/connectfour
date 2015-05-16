@@ -16,8 +16,18 @@ import policy
 from profiler import Profiler
 
 
+    
+# Neural Network Params
+nepisodes = 30000
+eta = 0.1
 input_rows = 15
 input_cols = 15
+
+# TD(lambda) Params
+lmbda = 0.
+gamma = 0.5
+
+
 
 def board_to_feature(board_mat, cache=None):
     if board_mat.shape != (6,7):
@@ -46,14 +56,7 @@ def create_from_shared(shared):
     elif shape==4:
         return T.tensor4()
     raise Exception('Bad size {}'.format(shared.get_value().shape))
-    
-# Neural Network Params
-nepisodes = 30000
-eta = 0.1
 
-# TD(lambda) Params
-lmbda = 0.7
-gamma = 0.999
 
 #%%    
 
@@ -61,23 +64,23 @@ gamma = 0.999
 l_in = nn.layers.InputLayer((None, 3, input_rows, input_cols))
 
 # FIRST CONVOLUTIONAL LAYER
-l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=4, filter_size=(2, 2),strides=(1, 1),
+l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=16, filter_size=(3, 3),strides=(1, 1),
                                 nonlinearity=nn.nonlinearities.rectify)
 
 # FIRST POOLING LAYER. 
 l_pool1 = nn.layers.MaxPool2DLayer(l_conv1, ds=(2, 2))
 
 # SECOND CONVOLUTIONAL LAYER
-l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=8, filter_size=(2, 2),strides=(1, 1),
+l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=32, filter_size=(3, 3),strides=(1, 1),
                                 nonlinearity=nn.nonlinearities.rectify)
 
 # SECOND POOLING LAYER. Downsample a factor of 2x2
 l_pool2 = nn.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
 
-use_third_layer = True
+use_third_layer = False
 if use_third_layer:
     # THIRD CONVOLUTIONAL LAYER
-    l_conv3 = nn.layers.Conv2DLayer(l_pool2, num_filters=16, filter_size=(2, 2),strides=(1, 1),
+    l_conv3 = nn.layers.Conv2DLayer(l_pool2, num_filters=128, filter_size=(2, 2),strides=(1, 1),
                                     nonlinearity=nn.nonlinearities.rectify)
     
     # THIRD POOLING LAYER. Downsample a factor of 2x2
@@ -125,10 +128,16 @@ def optimal_action(board, color, possible_actions=None, cache=None):
     for action in possible_actions:
         possible_board = board.clone(cache2)
         possible_board.play(color, action)
-        possible_inp = board_to_feature(possible_board.board, cache)
-        action_scores.append((action, predict(possible_inp)))
-    action_scores = sorted(action_scores, key=lambda (action,scores): scores[0]
-        if color==Board.BLACK else -scores[0], reverse=True)
+        winner = possible_board.getWinner() # NN doesnt learn value of last state
+        possible_possible_actions = possible_board.availCols()
+        if winner != Board.EMPTY or not possible_possible_actions:
+            score = 1 if winner==Board.BLACK else (0 if winner==Board.EMPTY else -1)
+        else:           
+            possible_inp = board_to_feature(possible_board.board, cache)
+            score = predict(possible_inp)[0]
+        action_scores.append((action, score))
+    action_scores = sorted(action_scores, key=lambda (action,scores): scores
+        if color==Board.BLACK else -scores, reverse=True)
     best_action = action_scores[0][0]
     return best_action
     
@@ -136,103 +145,75 @@ def optimal_action(board, color, possible_actions=None, cache=None):
 class ConvNetPolicy(policy.Policy) :
     def take_action(self, color, board):
         return optimal_action(board, color)
-        
-    
-#%%
-board = Board()
-inp = board_to_feature(board.board)
-
+      
+def eval_against_random(ngames):
+    print 'Episode {}/{}'.format(episode+1, nepisodes)
+    eval_games = 1000
+    convnet_policy = ConvNetPolicy()
+    random_policy = policy.RandomPolicy()
+    print 'Evaluating ConvnetPolicy against RandomPolicy for {} rounds'.format(eval_games)
+    stats = policy.compete_fair(Board(), convnet_policy, random_policy, eval_games)
+    print '{} wins, {} draws, {} losses for ConvnetPolicy when playing first'.format(*stats[0])
+    print '{} wins, {} draws, {} losses for ConvnetPolicy when playing second'.format(*stats[1])       
+    return stats
+           
+      
 #%% Learn Optimal Value
+epsilon =  0.1 # every 10% of the cases play a random move (this is on-policy)
+random_policy = policy.RandomPolicy()
 wins = []
 profiler = Profiler()
-cache = np.zeros((1, 3, input_rows, input_cols))
 for episode in xrange(nepisodes):
-    if episode%10 == 0: print 'Episode {}/{}'.format(episode+1, nepisodes)
-    # Evaluate against Random every once in a while:
-    profiler.tic('evaluation')
-    if episode % 500 == 0:
+    if episode%10 == 0: 
         print 'Episode {}/{}'.format(episode+1, nepisodes)
-        eval_games = 1000
-        convnet_policy = ConvNetPolicy()
-        random_policy = policy.RandomPolicy()
-        print 'Evaluating ConvnetPolicy against RandomPolicy for {} rounds'.format(eval_games)
-        stats = policy.compete_fair(Board(), convnet_policy, random_policy, eval_games)
-        print '{} wins, {} draws, {} losses for ConvnetPolicy when playing first'.format(*stats[0])
-        print '{} wins, {} draws, {} losses for ConvnetPolicy when playing second'.format(*stats[1])       
+    # Evaluate against Random every once in a while:
+    if (episode+1) % 500 == 0:
+        stats = eval_against_random(100)
         wins.append((episode, stats[0][0], stats[1][0]))
-    profiler.toc()        
         
-    board = Board()
-   
-    end_of_game = False
-    y_last = 0
+    old_board = Board()
     for ply in xrange(7*6):
+        # Who is playing?
         color = Board.BLACK if ply%2==0 else Board.RED
-        
-        # Is there a winner?
-        winner = board.getWinner()
-        
-        # What can we play?
-        possible_actions = board.availCols()
+
+        # Play what?
+        possible_actions = old_board.availCols()
+
+        # Board current status
+        winner = old_board.getWinner()
         
         # Compute target
-        if winner != Board.EMPTY or not possible_actions: # END OF EPISODE
+        end_of_game = (winner != Board.EMPTY or not possible_actions)
+        if end_of_game: # END OF EPISODE
             if winner == Board.EMPTY:
                 y_target = 0.
             elif winner == Board.BLACK:
                 y_target = 1.
             else:
                 y_target = -1.
-            end_of_game = True
         else:
+            board = old_board.clone()            
+            if np.random.uniform() < epsilon:
+                best_action = random_policy.take_action(color, board)
+            else:
+                best_action = optimal_action(board, color, possible_actions)
+            board.play(color, best_action)                   
             inp = board_to_feature(board.board)
             y_target = predict(inp)[0,0]
         
+        print 'Episode {} Ply {} Color played {} ytarget {}'.format(
+                episode, ply, board.to_string(color), y_target)
+        
         # Update smoothed gradients and weights
-        profiler.tic('update_grads')
-        update_grads(inp)
-        profiler.toc()
-        if ply>0:
-            profiler.tic('update_weights')
-            update_weights_2(eta * (y_target - y_last))
-            profiler.toc()
+        if ply > 0:
+            update_grads(old_inp)
+            update_weights_2(eta * (y_target - y_old))
             
         # Finish this episode
         if end_of_game:
             break
-        
-        # Find and play best value for current player color/(ply%2)
-        profiler.tic('find_best_action')
-        best_action = optimal_action(board, color, possible_actions, cache)
-        board.play(color, best_action)
-        profiler.toc()
-        
-        # Backup last value
-        y_last = y_target
-        
-print profiler        
-        
-#%% Self-Play optimal strategy
-board = Board()
-for ply in xrange(7*6):
-    color = Board.BLACK if ply%2==0 else Board.RED
-    winner = board.getWinner()
-    possible_actions = board.availCols()
-    if winner != Board.EMPTY or not possible_actions: # END OF EPISODE
-        break
-    
-    # Find and play best value for current player color/(ply%2)
-    best_action = optimal_action(board, color)
-    board.play(color, best_action)
-    print '\n{} plays {}'.format(board.to_string(color), best_action)
-    print board
-print 'Winner is {} after {} moves'.format(board.to_string(color), ply)
 
-#%% Evaluate
-eval_games = 10
-convnet_policy = ConvNetPolicy()
-random_policy = policy.RandomPolicy()
-print 'Evaluating ConvnetPolicy against RandomPolicy for {} rounds'.format(eval_games)
-stats = policy.compete_fair(Board(), convnet_policy, random_policy, eval_games)
-print '{} wins, {} draws, {} losses for ConvnetPolicy when playing first'.format(*stats[0])
-print '{} wins, {} draws, {} losses for ConvnetPolicy when playing second'.format(*stats[1])
+        # Backup last value
+        old_board = board
+        old_inp = inp
+        y_old = y_target
