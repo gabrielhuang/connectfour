@@ -37,22 +37,20 @@ def board_to_feature(board_mat, cache=None):
 
 l_in = nn.layers.InputLayer((None, 3, input_rows, input_cols))
 
-l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=64, filter_size=(4, 4),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
+l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=16, filter_size=(2, 2),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
 l_pool1 = nn.layers.MaxPool2DLayer(l_conv1, ds=(2, 2))
 
+l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=32, filter_size=(2, 2),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
+l_pool2 = nn.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
 
-
-#l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=16, filter_size=(2, 2),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
-#l_pool2 = nn.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
-
-#l_conv3 = nn.layers.Conv2DLayer(l_pool2, num_filters=32, filter_size=(3, 3),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
-#l_pool3 = l_conv3
+l_conv3 = nn.layers.Conv2DLayer(l_pool2, num_filters=32, filter_size=(3, 3),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
+l_to_out = l_conv3
 
 # MLP alternative
-l_hidden = nn.layers.DenseLayer(l_pool1, num_units=400, nonlinearity=nn.nonlinearities.sigmoid)
-l_pool3 = l_hidden
+#l_hidden = nn.layers.DenseLayer(l_pool1, num_units=400, nonlinearity=nn.nonlinearities.sigmoid)
+#l_to_out = l_hidden
 
-l_out = nn.layers.DenseLayer(l_pool3, num_units=4, nonlinearity=nn.nonlinearities.sigmoid)
+l_out = nn.layers.DenseLayer(l_to_out, num_units=4, nonlinearity=nn.nonlinearities.sigmoid)
 objective = nn.objectives.Objective(l_out)
 cost_var = objective.get_loss()
 
