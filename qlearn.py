@@ -19,7 +19,7 @@ def board_to_feature(board_mat, cache=None):
     if board_mat.shape != (6,7):
         raise Exception('Board must be of size (6,7)')
     if cache is None:
-        feature = np.zeros((1, 3, input_rows, input_cols))
+        feature = np.zeros((1, 3, input_rows, input_cols), dtype=np.float32)
     else:        
         feature = cache
         feature[:] = 0.
@@ -85,7 +85,7 @@ class QPolicy(policy.Policy):
 # Q-Learning
 ngames = 1000
 epsilon = 0.1
-eta = 0.1
+eta = 0.01
 random_policy = policy.RandomPolicy()
 experience = []
 experience_size = 10000
