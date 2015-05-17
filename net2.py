@@ -92,7 +92,7 @@ def create_train_set(ntrain):
 
 
 #%%
-print 'Go'
+print 'Now training...'
 epochs = 10000
 eta = 0.1
 train_costs = []
