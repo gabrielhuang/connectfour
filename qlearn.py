@@ -12,8 +12,8 @@ from board import Board
 import policy
 
 # Input size
-input_rows = 15
-input_cols = 15
+input_rows = 10
+input_cols = 10
 
 def board_to_feature(board_mat, cache=None):
     if board_mat.shape != (6,7):
@@ -39,9 +39,9 @@ l_pool1 = nn.layers.MaxPool2DLayer(l_conv1, ds=(2, 2))
 l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=32, filter_size=(2, 2),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
 l_pool2 = nn.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
 
-l_dense1 = nn.layers.DenseLayer(l_pool2, num_units=256, nonlinearity=nn.nonlinearities.rectify)
+#l_dense1 = nn.layers.DenseLayer(l_pool2, num_units=256, nonlinearity=nn.nonlinearities.rectify)
 
-l_out = nn.layers.DenseLayer(l_dense1, num_units=14, nonlinearity=nn.nonlinearities.linear)
+l_out = nn.layers.DenseLayer(l_pool2, num_units=14, nonlinearity=nn.nonlinearities.sigmoid)
 objective = nn.objectives.Objective(l_out)
 cost_var = objective.get_loss()
 
@@ -49,7 +49,6 @@ params = nn.layers.get_all_params(l_out)
 print 'Params {}'.format(params)
 
 eta_var = T.scalar()
-#updates = nn.updates.sgd(cost_var, params, learning_rate=eta_var)
 updates = nn.updates.nesterov_momentum(cost_var, params, learning_rate=eta_var)
 
 predict = theano.function([l_in.input_var], l_out.get_output())
@@ -139,10 +138,10 @@ for t in xrange(ngames):
     if len(experience)>experience_size:
         experience = experience[-experience_size:]
         
-    print 'Game {}/{}'.format(t+1, ngames)
+    print 'Game {}/{} --> {} plies'.format(t+1, ngames, ply)
     print 'eta {} epsilon {}'.format(eta, epsilon)
     print 'experience {}, batch {}'.format(len(experience), batch_size)
     # evaluate
     stats = policy.compete(Board(), QPolicy(), policy.RandomPolicy(), 100)
-    print 'results against random: {}'.format(stats)
+    print 'wins/draws/losses against random: {}'.format(stats)
         
