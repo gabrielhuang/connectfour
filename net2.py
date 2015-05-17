@@ -37,15 +37,20 @@ def board_to_feature(board_mat, cache=None):
 
 l_in = nn.layers.InputLayer((None, 3, input_rows, input_cols))
 
-l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=16, filter_size=(2, 2),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
+l_conv1 = nn.layers.Conv2DLayer(l_in, num_filters=64, filter_size=(4, 4),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
 l_pool1 = nn.layers.MaxPool2DLayer(l_conv1, ds=(2, 2))
 
-l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=32, filter_size=(2, 2),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
-l_pool2 = nn.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
 
-#l_conv3 = nn.layers.Conv2DLayer(l_pool2, num_filters=128, filter_size=(2, 2),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
-#l_pool3 = nn.layers.MaxPool2DLayer(l_conv3, ds=(2, 2))
-l_pool3 = l_pool2
+
+#l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=16, filter_size=(2, 2),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
+#l_pool2 = nn.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
+
+#l_conv3 = nn.layers.Conv2DLayer(l_pool2, num_filters=32, filter_size=(3, 3),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
+#l_pool3 = l_conv3
+
+# MLP alternative
+l_hidden = nn.layers.DenseLayer(l_pool1, num_units=400, nonlinearity=nn.nonlinearities.sigmoid)
+l_pool3 = l_hidden
 
 l_out = nn.layers.DenseLayer(l_pool3, num_units=4, nonlinearity=nn.nonlinearities.sigmoid)
 objective = nn.objectives.Objective(l_out)
@@ -71,8 +76,8 @@ y[1] = black wins
 y[2] = red wins
 '''
 def create_train_set(ntrain):
-    X_train = np.zeros((ntrain, 3, input_rows, input_cols))
-    y_train = np.zeros((ntrain, 4))
+    X_train = np.zeros((ntrain, 3, input_rows, input_cols), dtype=np.float32)
+    y_train = np.zeros((ntrain, 4), dtype=np.float32)
     board = Board()
     for i in xrange(ntrain):
         board.randomize()
@@ -86,17 +91,21 @@ def create_train_set(ntrain):
         #print 'Filled {} Winner {}'.format(is_filled, winner)
     return X_train,y_train
     
-train_size = 10000
-X_train, y_train = create_train_set(train_size) 
-X_test, y_test = create_train_set(1000) 
+
 
 #%%
-epochs = 1000
-eta = 1.
+print 'Go'
+epochs = 10000
+eta = 0.1
 train_costs = []
 test_costs = []
-batch_size = 100
+batch_size = 20
 for epoch in xrange(epochs):
+    # REsample trainset
+    train_size = 1000
+    X_train, y_train = create_train_set(train_size) 
+    X_test, y_test = create_train_set(1000) 
+    
     batch_costs = []
     for i in xrange(0, train_size//batch_size, batch_size):
         X_batch = X_train[i:i+batch_size]
