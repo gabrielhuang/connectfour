@@ -80,13 +80,14 @@ class QPolicy(policy.Policy):
 
 
 # Q-Learning
-ngames = 1000
-get_epsilon = lambda t: max(0.1, 1-float(t)/ngames)
+ngames = 5000
+get_epsilon = lambda t: max(0.1, 1-float(t)/(ngames/10))
 get_eta = lambda t: np.float32(0.1 / np.sqrt(t+1))
 random_policy = policy.RandomPolicy()
 experience = []
-experience_size = 10000
-batch_size = 100
+experience_size = 1000000
+wins = []
+batch_size = 32
 gamma = 0.9
 X_batch = np.zeros((batch_size, 3, input_rows, input_cols), dtype=np.float32)
 y_batch = np.zeros((batch_size, 1), dtype=np.float32)
@@ -116,7 +117,7 @@ for t in xrange(ngames):
         new_inp = board_to_feature(new_board.board)     
 
         end_of_game = (winner != Board.EMPTY) or (not new_board.availCols())     
-        
+    
         experience.append((inp, action, reward, end_of_game, color, new_inp))
         # Sample batch from experience
         batch_idx = np.random.choice(len(experience), batch_size)
@@ -131,17 +132,29 @@ for t in xrange(ngames):
                 scores = predict(s)[0]
                 other_reward = np.max(scores[offset:offset+7])
                 y_batch[i] = r + gamma * other_reward
-            
         train_action(X_batch, y_batch, select_batch, eta)
         
         board = new_board
+        if end_of_game:
+            break
     if len(experience)>experience_size:
         experience = experience[-experience_size:]
-        
-    print 'Game {}/{} --> {} plies'.format(t+1, ngames, ply)
-    print 'eta {} epsilon {}'.format(eta, epsilon)
-    print 'experience {}, batch {}'.format(len(experience), batch_size)
-    # evaluate
-    stats = policy.compete(Board(), QPolicy(), policy.RandomPolicy(), 100)
-    print 'wins/draws/losses against random: {}'.format(stats)
-        
+
+    if (t+1)%10 == 0:
+        print 'Game {}/{} --> {} plies'.format(t+1, ngames, ply)
+        print 'eta {} epsilon {}'.format(eta, epsilon)
+        print 'experience {}, batch {}'.format(len(experience), batch_size)
+        # evaluate
+        stats = policy.compete(Board(), QPolicy(), policy.RandomPolicy(), 100)
+        wins.append((t, stats[0]))
+        print '-'*32
+        print 'wins/draws/losses against random: {}'.format(stats)
+        print '-'*32
+
+#%%
+print 'Evolution of wins'
+print '\n'.join(map(str, wins))
+
+#%%
+print 'Now see the network self play'
+policy.compete_one_game(Board(), QPolicy(), QPolicy())
