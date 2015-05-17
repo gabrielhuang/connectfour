@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Sat May 16 23:12:11 2015
-
+'''
+@brief Q-learning for the game of Connect 4
 @author: gabi
-"""
+@date: May 2015
+
+This uses Q-learning similar to 
+Mnih et al. 2013 "Playing Atari with Deep Reinforcement Learning"
+http://arxiv.org/pdf/1312.5602.pdf
+'''
+
 import numpy as np
 import theano
 import theano.tensor as T
