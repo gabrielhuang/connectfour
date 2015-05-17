@@ -39,11 +39,9 @@ l_pool1 = nn.layers.MaxPool2DLayer(l_conv1, ds=(2, 2))
 l_conv2 = nn.layers.Conv2DLayer(l_pool1, num_filters=32, filter_size=(2, 2),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
 l_pool2 = nn.layers.MaxPool2DLayer(l_conv2, ds=(2, 2))
 
-#l_conv3 = nn.layers.Conv2DLayer(l_pool2, num_filters=128, filter_size=(2, 2),strides=(1, 1), nonlinearity=nn.nonlinearities.rectify)
-#l_pool3 = nn.layers.MaxPool2DLayer(l_conv3, ds=(2, 2))
-l_pool3 = l_pool2
+l_dense1 = nn.layers.DenseLayer(l_pool2, num_units=256, nonlinearity=nn.nonlinearities.rectify)
 
-l_out = nn.layers.DenseLayer(l_pool3, num_units=14, nonlinearity=nn.nonlinearities.sigmoid)
+l_out = nn.layers.DenseLayer(l_dense1, num_units=14, nonlinearity=nn.nonlinearities.linear)
 objective = nn.objectives.Objective(l_out)
 cost_var = objective.get_loss()
 
@@ -84,8 +82,8 @@ class QPolicy(policy.Policy):
 
 # Q-Learning
 ngames = 1000
-epsilon = 0.1
-eta = 0.01
+get_epsilon = lambda t: max(0.1, 1-float(t)/ngames)
+get_eta = lambda t: np.float32(0.1 / np.sqrt(t+1))
 random_policy = policy.RandomPolicy()
 experience = []
 experience_size = 10000
@@ -94,13 +92,9 @@ gamma = 0.9
 X_batch = np.zeros((batch_size, 3, input_rows, input_cols), dtype=np.float32)
 y_batch = np.zeros((batch_size, 1), dtype=np.float32)
 select_batch = np.zeros((batch_size, 14), dtype=np.float32) 
-for game in xrange(ngames):
-    print 'Game {}/{}'.format(game+1, ngames)
-    print 'experience  {}, batch {}'.format(len(experience), batch_size)
-    # evaluate
-    stats = policy.compete(Board(), QPolicy(), policy.RandomPolicy(), 100)
-    print 'results against random: {}'.format(stats)
-    
+for t in xrange(ngames):
+    eta = get_eta(t)
+    epsilon = get_epsilon(t)
     board = Board()
     for ply in xrange(board.ncols()*board.nrows()):
         color = Board.BLACK if ply%2==0 else Board.RED # who plays this ply    
@@ -144,3 +138,11 @@ for game in xrange(ngames):
         board = new_board
     if len(experience)>experience_size:
         experience = experience[-experience_size:]
+        
+    print 'Game {}/{}'.format(t+1, ngames)
+    print 'eta {} epsilon {}'.format(eta, epsilon)
+    print 'experience {}, batch {}'.format(len(experience), batch_size)
+    # evaluate
+    stats = policy.compete(Board(), QPolicy(), policy.RandomPolicy(), 100)
+    print 'results against random: {}'.format(stats)
+        
