@@ -80,7 +80,7 @@ class QPolicy(policy.Policy):
 
 
 # Q-Learning
-ngames = 5000
+ngames = 50000
 get_epsilon = lambda t: max(0.1, 1-float(t)/(ngames/10))
 get_eta = lambda t: np.float32(0.01) #np.float32(0.1 / np.sqrt(t+1))
 random_policy = policy.RandomPolicy()
