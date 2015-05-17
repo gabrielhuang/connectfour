@@ -18,7 +18,7 @@ from profiler import Profiler
 
     
 # Neural Network Params
-nepisodes = 30000
+nepisodes = 100000
 eta = 0.1
 input_rows = 15
 input_cols = 15
@@ -159,8 +159,8 @@ def eval_against_random(ngames):
            
       
 #%% Learn Optimal Value
-epsilons =  {0: 0.1, 1000: 0.08, 10000: 0.005}
-etas = {0: 0.1, 1000: 0.03, 10000: 0.005}
+epsilons =  {0: 0.1, 1000: 0.08, 10000: 0.05}
+etas = {0: 0.1, 1000: 0.03, 10000: 0.001}
 random_policy = policy.RandomPolicy()
 wins = []
 profiler = Profiler()
@@ -171,8 +171,8 @@ for episode in xrange(nepisodes):
     if episode%10 == 0: 
         print 'Episode {}/{} epsilon {} eta {}'.format(episode+1, nepisodes, epsilon, eta)
     # Evaluate against Random every once in a while:
-    if (episode+1) % 500 == 0:
-        stats = eval_against_random(100)
+    if (episode+1) % 1000 == 0:
+        stats = eval_against_random(500)
         wins.append((episode, stats[0][0], stats[1][0]))
         
     old_board = Board()
