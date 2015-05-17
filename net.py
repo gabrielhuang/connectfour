@@ -189,6 +189,7 @@ for episode in xrange(nepisodes):
         # Compute target
         end_of_game = (winner != Board.EMPTY or not possible_actions)
         if end_of_game: # END OF EPISODE
+            # There can only be one winner
             if winner == Board.EMPTY:
                 y_target = 0.
             elif winner == Board.BLACK:

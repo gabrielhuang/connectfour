@@ -124,20 +124,27 @@ class Board():
         Return:
         Board.RED if RED has won, 
         Board.BLACK if BLACK has won, 
+        Board.RED + Board.BLACK if both have won (that can happen)
         Board.EMPTY if neither
         '''
+        black_win = 0
+        red_win = 0
         # Check if any of the columns have winners.
         for col in self.cols():
             result = self.hasEnoguhAligned(col, self.to_win)
-            if result != self.EMPTY:
-                return result
+            if result == self.BLACK:
+                black_win = 1
+            if result == self.RED:
+                red_win = 1
         # Check if any of the rows have winners.
         for row in self.rows():
             result = self.hasEnoguhAligned(row, self.to_win)
-            if result != self.EMPTY:
-                return result
+            if result == self.BLACK:
+                black_win = 1
+            if result == self.RED:
+                red_win = 1
         # No winners
-        return self.EMPTY
+        return self.BLACK * black_win + self.RED * red_win
 
     def availCols(self):
         '''

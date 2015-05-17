@@ -85,8 +85,8 @@ def create_train_set(ntrain):
         is_filled = not bool(board.availCols())
         X_train[i] = board_to_feature(board.board)
         y_train[i][0] = 1. if winner==Board.EMPTY else 0.
-        y_train[i][1] = 1. if winner==Board.BLACK else 0.
-        y_train[i][2] = 1. if winner==Board.RED else 0.
+        y_train[i][1] = 1. if winner|Board.BLACK else 0.
+        y_train[i][2] = 1. if winner|Board.RED else 0.
         y_train[i][3] = 1. if is_filled else 0.
         #print 'Filled {} Winner {}'.format(is_filled, winner)
     return X_train,y_train
