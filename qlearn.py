@@ -12,8 +12,8 @@ from board import Board
 import policy
 
 # Input size
-input_rows = 10
-input_cols = 10
+input_rows = 9
+input_cols = 9
 
 def board_to_feature(board_mat, cache=None):
     if board_mat.shape != (6,7):
@@ -82,7 +82,7 @@ class QPolicy(policy.Policy):
 # Q-Learning
 ngames = 5000
 get_epsilon = lambda t: max(0.1, 1-float(t)/(ngames/10))
-get_eta = lambda t: np.float32(0.1 / np.sqrt(t+1))
+get_eta = lambda t: np.float32(0.01) #np.float32(0.1 / np.sqrt(t+1))
 random_policy = policy.RandomPolicy()
 experience = []
 experience_size = 1000000
@@ -141,7 +141,7 @@ for t in xrange(ngames):
         experience = experience[-experience_size:]
 
     if (t+1)%10 == 0:
-        print 'Game {}/{} --> {} plies'.format(t+1, ngames, ply)
+        print 'Game {}/{} --> {} plies'.format(t+1, ngames, ply+1)
         print 'eta {} epsilon {}'.format(eta, epsilon)
         print 'experience {}, batch {}'.format(len(experience), batch_size)
         # evaluate
@@ -152,9 +152,17 @@ for t in xrange(ngames):
         print '-'*32
 
 #%%
+import matplotlib.pyplot as plt
 print 'Evolution of wins'
-print '\n'.join(map(str, wins))
+wins_ = np.array(wins)
+window = 20
+smoothed = np.convolve(wins_[:,1],[1./window]*window, mode='same')
+plt.plot(wins_[:,0], wins_[:,1], wins_[:,0], smoothed)
 
 #%%
-print 'Now see the network self play'
-policy.compete_one_game(Board(), QPolicy(), QPolicy())
+print 'Now see the network self play against itself'
+policy.compete_one_game(Board(), QPolicy(), QPolicy(), verbose=True)
+
+#%%
+print 'Now play against random'
+policy.compete_one_game(Board(), QPolicy(), policy.RandomPolicy(), verbose=True)
