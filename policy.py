@@ -29,46 +29,6 @@ class RandomPolicy:
         avail_cols = board.availCols()
         return np.random.choice(avail_cols)
 
-"""
-class EpsilonGreedyPolicy:
-    '''
-    Takes another policy and makes it epsilon-greedy
-    '''
-    def __init__(self, color, other_policy, epsilon):
-        self.other_policy = other_policy
-        self.random_policy = RandomPolicy()
-        self.epsilon = epsilon
-    def take_action(self, board):
-        if np.random.uniform()>self.epsilon:
-            return self.other_policy.take_action(board)
-        else:
-            return self.random_policy.take_action(board)
-            
-            
-class QGreedyPolicy:
-    '''
-    Takes a policy greedy relative to Q(s,a)
-    If many a have the same Q-value, sample uniformly
-    
-    Q['state']['action'] = value or 0. if invalid
-    '''
-    def __init__(self, q):
-        self.q = q
-        self.random_policy = RandomPolicy()
-    def take_action(self, board):  
-        current_state = board.to_tuple()
-        if current_state in self.q and self.q[current_state]:
-            scores = sorted(self.q[current_state].items(), key=lambda (action,score):score, reverse=True)
-            idx = 1
-            while idx < len(scores):
-                if scores[idx] == scores[0]:
-                    break
-                else:
-                    idx += 1
-            return np.random.choice([action for action,score in scores[:idx]])
-        else: # No action known for this state
-            return self.random_policy.take_action(board)
-"""
 
 def compete_one_game(board_prototype, policy_black, policy_red, verbose=False):
     '''
