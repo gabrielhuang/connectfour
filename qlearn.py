@@ -125,9 +125,9 @@ class QPolicy(policy.Policy):
 ngames = 5000
 experience_size = 1000000
 batch_size = 32
-gamma = 0.9
-get_epsilon = lambda t: max(0.1, 1-float(t)/(ngames/4))
-get_eta = lambda t: np.float32(0.01) #np.float32(0.1 / np.sqrt(t+1))
+gamma = 0.9 # discounting factor
+get_epsilon = lambda t: max(0.1, 1-float(t)/(ngames/4)) # probability of random action
+get_eta = lambda t: np.float32(0.01) # learning rate
 
 wins = []
 experience = []
